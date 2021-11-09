@@ -22,6 +22,7 @@ class SolverCP:
         w, h = ([ i for i, _ in rectangles ], [ j for _, j in rectangles ])
         instance["widths"] = w
         instance["heights"] = h
+        instance["rectangles"] = rectangles
 
         result = instance.solve(timeout=datetime.timedelta(seconds=self.timeout))
 

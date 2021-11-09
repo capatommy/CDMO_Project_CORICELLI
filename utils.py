@@ -31,12 +31,12 @@ def load_solution(filename):
     return None, []
 
 
-def plot_result(plate, circuits, plot_title):
+def plot_result(plate, rectangles, plot_title):
     fig, ax = plt.subplots()
     fig.canvas.manager.set_window_title(plot_title)
     
-    for idx, (w, h, x, y) in enumerate(circuits):
-        rect = patches.Rectangle((x, y), w, h, linewidth=2, edgecolor='black', facecolor=colors.hsv_to_rgb((idx / len(circuits), 1, 1)))
+    for idx, (w, h, x, y) in enumerate(rectangles):
+        rect = patches.Rectangle((x, y), w, h, linewidth=2, edgecolor='black', facecolor=colors.hsv_to_rgb((idx / len(rectangles), 1, 1)))
         ax.add_patch(rect)
 
         for i in range(1, w):
