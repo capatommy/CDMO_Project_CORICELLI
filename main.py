@@ -1,8 +1,8 @@
 from ctypes import ArgumentError
 import os
 from cp.src.solver import SolverCP
-#from sat.src.solver import SolverSAT
-#from smt.src.solver import SolverSMT
+from sat.src.sat_solver import SolverSAT
+
 
 from utils import load_solution, plot_global_statistics, plot_result, solve_and_write, parse_arguments
 
@@ -27,10 +27,8 @@ if __name__ == "__main__":
 
     if args.solver == "cp": 
         solver = SolverCP(int(args.timeout), rotation=args.rotation, solver_dir=solver_dir)
-    #elif args.solver == "sat": 
-        #solver = SolverSAT(int(args.timeout), rotation=args.rotation) 
-    #elif args.solver == "smt": 
-        #solver = SolverSMT(int(args.timeout), rotation=args.rotation)
+    elif args.solver == "sat": 
+        solver = SolverSAT(int(args.timeout), rotation=args.rotation) 
     elif args.plot:    
         output_dir = os.path.join(base_dir, args.output)
         for input in inputs:
