@@ -1,10 +1,11 @@
 from operator import length_hint
 import os
-import time
-from z3 import And, Or, Bool, sat, Not, Solver, Implies
+from z3 import *
 from itertools import combinations
 import numpy as np
 import utils
+import time
+from tqdm import tqdm
 
 class SolverSAT:
 
@@ -37,9 +38,10 @@ class SolverSAT:
 
         r = None
 
+        print("Building constraints...")
 
         no_overlapping = []
-        for i in range(upper_bound):
+        for i in tqdm(range(upper_bound), desc= "NO OVERLAPPING", leave = False):
             for j in range(self.plate_width):
                 no_overlapping += self.amo(p[i][j])
 
@@ -49,7 +51,7 @@ class SolverSAT:
 
             r = [Bool(f"r_{i}") for i in range(self.circuits_num)]
 
-            for k in range(self.circuits_num):
+            for k in tqdm(range(self.circuits_num), "Exclusivity position in the board by each circuit", leave =False):
                 all_configurations = []
 
                 for y in range(upper_bound - self.h[k] + 1):
@@ -87,7 +89,7 @@ class SolverSAT:
 
                 eo_configurations += self.eo(no_rot_configurations, rot_configurations)
         else:
-            for k in range(self.circuits_num):
+            for k in tqdm(range(self.circuits_num), "Exclusivity position in the board by each circuit", leave =False):
                 all_configurations = []
 
                 for y in range(upper_bound - self.h[k] + 1):
@@ -104,35 +106,39 @@ class SolverSAT:
                             
                 eo_configurations += self.eo(all_configurations)
         
-        one_hot_length = self.eo([l[i] for i in range(upper_bound)])
+        one_hot_length = self.eo([l[i] for i in tqdm(range(upper_bound), "One-hot encoding of the height of the board", leave=False)])
 
-        length_circuits_positioning = [l[i] == And([Or(self.flat(p[i]))] + [Not(Or(self.flat(p[j]))) for j in range(i + 1, upper_bound)]) for i in range(upper_bound)]
+        length_circuits_positioning = [l[i] == And([Or(self.flat(p[i]))] + [Not(Or(self.flat(p[j]))) for j in range(i + 1, upper_bound)]) for i in tqdm(range(upper_bound), desc="Lenght consistency between circuits", leave=False)]
 
         max_h = np.argmax(self.h)
         highest_circuit_first = [And([p[i][j][k] if k == max_h 
-            else Not(p[i][j][k]) for k in range(self.circuits_num) for j in range(self.w[max_h]) for i in range(self.h[max_h])])]
+            else Not(p[i][j][k]) for k in range(self.circuits_num) for j in range(self.w[max_h]) for i in tqdm(range(self.h[max_h]),desc="Set Highest circuit first", leave=False)])]
 
-        self.solver = Solver()
+        solver = Solver()
 
-        self.solver.add(no_overlapping)
-        self.solver.add(eo_configurations)
-        self.solver.add(one_hot_length)
-        self.solver.add(length_circuits_positioning)
-        self.solver.add(highest_circuit_first)
+        print("Adding constraints...")
 
-        self.solver.set("timeout", self.timeout*1000)
+        solver.add(no_overlapping)
+        solver.add(eo_configurations)
+        solver.add(one_hot_length)
+        solver.add(length_circuits_positioning)
+        solver.add(highest_circuit_first)
+
+        solver.set("timeout", self.timeout*1000)
+
+        print("Solving the task...")
         start_time = time.time()
 
         while True:
-            if self.solver.check() == sat:
+            if solver.check() == sat:
 
-                model = self.solver.model()
+                model = solver.model()
                 for k in range(upper_bound):
                     if model.evaluate(l[k]):
                         length_sol = k
 
             # prevent next model from using the same assignment as a previous model
-                self.solver.add(self.alo([l[i] for i in range(length_sol)]))
+                solver.add(self.alo([l[i] for i in range(length_sol)]))
 
                 solution_found = True
 
@@ -142,41 +148,34 @@ class SolverSAT:
         
         if solution_found:
             length_sol += 1
-            r = time.time() - start_time
+            elapsed_time = time.time() - start_time
 
-            circuit_pos = self.evaluate(length_sol, p, r)
+            circuit_pos = self.model_to_coordinates(model, p, self.plate_width, length_sol, self.circuits_num, r)
 
-            print("SOLUTION LENGTH: {}".format(length_sol))
-            print("CIRCUIT POS: {}".format(circuit_pos))
+            return ((self.plate_width, length_sol), circuit_pos), elapsed_time
 
-            return ((self.plate_width, length_sol), circuit_pos), r
-
-        elif self.solver.reason_unknown() == "timeout":
+        elif solver.reason_unknown() == "timeout":
             print("Timeout reached, no optimal solution provided")
         else:
             print("Unsatisfiable problem")
 
-    def evaluate(self, height, p, rot):
-        if self.solver.check() == sat:
-            model = self.solver.model()
+    def model_to_coordinates(self, model, p, w, l, n, r=None):
+        # Create solution array
+        solution = np.array([[[is_true(model[p[i][j][k]]) for k in range(n)] for j in range(w)] for i in range(l)])
+        circuits_pos = []
 
-            circuits_pos = []
+        for k in range(n):
+            y_ids, x_ids = solution[:, :, k].nonzero()
+            x = np.min(x_ids)
+            y = np.min(y_ids)
 
-            for k in range(self.circuits_num):
-                found = False
-                for x in range(self.plate_width):
-                    for y in range(height):
-                        if not found and model.evaluate(p[x][y][k]):
-                            if not self.rotation:
-                                circuits_pos.append((self.w[k], self.h[k], x, y))
-                            else:
-                                if model.evaluate(rot[k]):
-                                    circuits_pos.append((self.h[k], self.w[k], x, y))
-                                else:
-                                    circuits_pos.append((self.w[k], self.h[k], x, y))
-                            found = True
+            if r is None:
+                circuits_pos.append((self.w[k], self.h[k], x, y))
+            else:
+                circuits_pos.append((self.h[k], self.w[k], x, y))
 
-            return circuits_pos
+
+        return circuits_pos
 
 if __name__ == "__main__":
     import sys
