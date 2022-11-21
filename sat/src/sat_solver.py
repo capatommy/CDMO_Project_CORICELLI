@@ -73,10 +73,11 @@ class SolverSAT:
 
                 all_configurations = []
 
-                for y in range(upper_bound - self.h[k] + 1):
-                    for x in range(self.plate_width - self.w[k] + 1):
+                for y in range(upper_bound - y_r_k + 1):
+                    for x in range(self.plate_width - x_r_k + 1):
                         
                         configurations = []
+                        
                         for oy in range(upper_bound):
                             for ox in range(self.plate_width):
                                 if y <= oy < y + y_r_k and x <= ox < x + x_r_k:
@@ -87,7 +88,7 @@ class SolverSAT:
                         all_configurations.append(And(configurations))
                 rot_configurations = And(r[k], And(self.eo(all_configurations)))
 
-                eo_configurations += self.eo(no_rot_configurations, rot_configurations)
+                eo_configurations += self.eo([no_rot_configurations, rot_configurations])
         else:
             for k in tqdm(range(self.circuits_num), "Exclusivity position in the board by each circuit", leave =False):
                 all_configurations = []
@@ -129,6 +130,8 @@ class SolverSAT:
         print("Solving the task...")
         start_time = time.time()
 
+        solution_found = False
+
         while True:
             if solver.check() == sat:
 
@@ -156,8 +159,10 @@ class SolverSAT:
 
         elif solver.reason_unknown() == "timeout":
             print("Timeout reached, no optimal solution provided")
+            return None, 0
         else:
             print("Unsatisfiable problem")
+            return None, 0
 
     def model_to_coordinates(self, model, p, w, l, n, r=None):
         # Create solution array
@@ -172,8 +177,10 @@ class SolverSAT:
             if r is None:
                 circuits_pos.append((self.w[k], self.h[k], x, y))
             else:
-                circuits_pos.append((self.h[k], self.w[k], x, y))
-
+                    if is_true(model[r[k]]):
+                        circuits_pos.append((self.h[k], self.w[k], x, y))
+                    else:
+                        circuits_pos.append((self.w[k], self.h[k], x, y))
 
         return circuits_pos
 
