@@ -2,6 +2,7 @@ from ctypes import ArgumentError
 import os
 from cp.src.solver import SolverCP
 from sat.src.sat_solver import SolverSAT
+from mip.src.mip_solver import SolverMIP
 
 
 from utils import load_solution, plot_global_statistics, plot_result, solve_and_write, parse_arguments
@@ -29,6 +30,8 @@ if __name__ == "__main__":
         solver = SolverCP(int(args.timeout), rotation=args.rotation, solver_dir=solver_dir)
     elif args.solver == "sat": 
         solver = SolverSAT(int(args.timeout), rotation=args.rotation) 
+    elif args.solver == "mip":
+        solver = SolverMIP(int(args.timeout), rotation=args.rotation)
     elif args.plot:    
         output_dir = os.path.join(base_dir, args.output)
         for input in inputs:
