@@ -26,54 +26,151 @@ class SolverMIP:
         lower_bound = max(self.h)
         CIRCUITS = range(self.circuits_num)
 
-        l = LpVariable("l", lowBound=lower_bound, upBound=upper_bound, cat = LpInteger)
-        self.model += l
+
         
-        x = [
-            LpVariable(
-                f"x_{i}", lowBound=0, upBound=int(self.plate_width - self.w[i]), cat=LpInteger
-            ) for i in CIRCUITS
-        ]
+        if self.rotation:
+            upper_bound = int(sum([max(self.h[i], self.w[i]) for i in CIRCUITS]))
+            lower_bound = max([min(self.w[i], self.h[i]) for i in CIRCUITS])
+            l = LpVariable("l", lowBound=lower_bound, upBound=upper_bound, cat = LpInteger)
+            self.model += l
 
-        y = [
-            LpVariable(
-                f"y_{i}", lowBound=0, upBound=int(upper_bound - self.h[i]), cat=LpInteger
-            ) for i in CIRCUITS
-        ]
-        
-        for i in CIRCUITS:
-            self.model += y[i] + self.h[i] <= l, f"Y-axis of {i}-th coordinate bound"
+            x = [
+                LpVariable(
+                    f"x_{i}", lowBound=0, upBound=int(self.plate_width - min(self.w[i], self.h[i])), cat=LpInteger
+                ) for i in CIRCUITS
+            ]
 
-        # Booleans for OR condition
-        D = range(2)
-        delta = LpVariable.dicts(
-            "delta",
-            indices=(CIRCUITS, CIRCUITS, D),
-            cat=LpBinary,
-            lowBound=0,
-            upBound=1,
-        )
+            y = [
+                LpVariable(
+                    f"y_{i}", lowBound=0, upBound=int(upper_bound - min(self.w[i], self.h[i])), cat=LpInteger
+                ) for i in CIRCUITS
+            ]
+            r = LpVariable.dicts(
+                "r", indices=CIRCUITS, lowBound=0, upBound=1, cat=LpBinary
+            )
 
-        max_circuit = np.argmax(np.asarray(self.w) * np.asarray(self.h))
-        self.model += x[max_circuit] == 0, "Max circuit in x-0"
-        self.model += y[max_circuit] == 0, "Max circuit in y-0"
+            for i in CIRCUITS:
+                if self.w[i] == self.h[i] or self.h[i] > self.plate_width:
+                    r[i] = 0
+            
+            for i in CIRCUITS:
+                self.model += (
+                    x[i] + self.w[i] * (1 - r[i]) + self.h[i] * r[i] <= self.plate_width,
+                    f"X-axis of {i}-th coordinate bound",
+                )
+                self.model += (
+                    y[i] + self.h[i] * (1 - r[i]) + self.w[i] * r[i] <= l,
+                    f"Y-axis of {i}-th coordinate bound",
+                )
 
-        # Non-Overlap constraints, at least one needs to be satisfied
-        for i in CIRCUITS:
-            for j in CIRCUITS:
-                if i < j:
-                    if self.w[i] + self.w[j] > self.plate_width:
-                        self.model += delta[i][j][0] == 1
-                        self.model += delta[j][i][0] == 1
+            D = range(2)
+            delta = LpVariable.dicts(
+                "delta",
+                indices=(CIRCUITS, CIRCUITS, D),
+                cat=LpBinary,
+                lowBound=0,
+                upBound=1,
+            )
 
-                    self.model += x[i] + self.w[i] <= x[j] + (delta[i][j][0]) * self.plate_width
-                    self.model += x[j] + self.w[j] <= x[i] + (delta[j][i][0]) * self.plate_width
-                    self.model += y[i] + self.h[i] <= y[j] + (delta[i][j][1]) * upper_bound
-                    self.model += y[j] + self.h[j] <= y[i] + (delta[j][i][1]) * upper_bound
-                    self.model += (
-                        delta[i][j][0] + delta[j][i][0] + delta[i][j][1] + delta[j][i][1]
-                        <= 3
-                    )
+            for i in CIRCUITS:
+                    for j in CIRCUITS:
+                        if i < j:
+                            if all(
+                                [
+                                    (u + v) > self.plate_width
+                                    for u in [self.w[i], self.h[i]]
+                                    for v in [self.w[i], self.h[i]]
+                                ]
+                            ):
+                                self.model += delta[i][j][0] == 1
+                                self.model += delta[j][i][0] == 1
+
+                            self.model += (
+                                x[i]
+                                + self.w[i] * (1 - r[i])
+                                + self.h[i] * r[i]
+                                <= x[j] + delta[i][j][0] * self.plate_width
+                            )
+                            self.model += (
+                                x[j]
+                                + self.w[j] * (1 - r[j])
+                                + self.h[j] * r[j]
+                                <= x[i] + delta[j][i][0] * self.plate_width
+                            )
+
+                            self.model += (
+                                y[i]
+                                + self.h[i] * (1 - r[i])
+                                + self.w[i] * r[i]
+                                <= y[j] + delta[i][j][1] * upper_bound
+                            )
+                            self.model += (
+                                y[j]
+                                + self.h[j] * (1 - r[j])
+                                + self.w[j] * r[j]
+                                <= y[i] + delta[j][i][1] * upper_bound
+                            )
+
+                            self.model += (
+                                delta[i][j][0] + delta[j][i][0] + delta[i][j][1] + delta[j][i][1]
+                                <= 3
+                            )
+
+            max_circuit = np.argmax(np.asarray(self.w) * np.asarray(self.h))
+            self.model += x[max_circuit] == 0, "Max circuit in x-0"
+            self.model += y[max_circuit] == 0, "Max circuit in y-0"
+
+        else:
+
+            l = LpVariable("l", lowBound=lower_bound, upBound=upper_bound, cat = LpInteger)
+            self.model += l
+
+            x = [
+                LpVariable(
+                    f"x_{i}", lowBound=0, upBound=int(self.plate_width - self.w[i]), cat=LpInteger
+                ) for i in CIRCUITS
+            ]
+
+            y = [
+                LpVariable(
+                    f"y_{i}", lowBound=0, upBound=int(upper_bound - self.h[i]), cat=LpInteger
+                ) for i in CIRCUITS
+            ]
+            
+            for i in CIRCUITS:
+                self.model += y[i] + self.h[i] <= l, f"Y-axis of {i}-th coordinate bound"
+
+            # Booleans for OR condition
+            D = range(2)
+            delta = LpVariable.dicts(
+                "delta",
+                indices=(CIRCUITS, CIRCUITS, D),
+                cat=LpBinary,
+                lowBound=0,
+                upBound=1,
+            )
+
+            max_circuit = np.argmax(np.asarray(self.w) * np.asarray(self.h))
+            self.model += x[max_circuit] == 0, "Max circuit in x-0"
+            self.model += y[max_circuit] == 0, "Max circuit in y-0"
+
+            # Non-Overlap constraints, at least one needs to be satisfied
+            for i in CIRCUITS:
+                for j in CIRCUITS:
+                    if i < j:
+                        if self.w[i] + self.w[j] > self.plate_width:
+                            self.model += delta[i][j][0] == 1
+                            self.model += delta[j][i][0] == 1
+
+                        self.model += x[i] + self.w[i] <= x[j] + (delta[i][j][0]) * self.plate_width
+                        self.model += x[j] + self.w[j] <= x[i] + (delta[j][i][0]) * self.plate_width
+                        self.model += y[i] + self.h[i] <= y[j] + (delta[i][j][1]) * upper_bound
+                        self.model += y[j] + self.h[j] <= y[i] + (delta[j][i][1]) * upper_bound
+                        self.model += (
+                            delta[i][j][0] + delta[j][i][0] + delta[i][j][1] + delta[j][i][1]
+                            <= 3
+                        )
+
         try:
             self.model.solve(CPLEX_PY(mip=True, msg=False, timeLimit=self.timeout))
         except BaseException as err:
@@ -86,7 +183,6 @@ class SolverMIP:
             return None, 0
         else:
             height_sol = round(value(self.model.objective))
-            print("HEIGHT: {}".format(height_sol))
 
             circuit_pos = []
             x_sol = []
