@@ -46,7 +46,5 @@ constraint symmetry_breaking_constraint(
   );
 
 solve 
-  %:: int_search([plate_height], dom_w_deg, indomain_random, complete)
-  %:: restart_constant(1000000)
   :: int_search([plate_height], input_order, indomain_min, complete)
   minimize plate_height;

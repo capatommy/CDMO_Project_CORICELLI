@@ -153,7 +153,7 @@ class SolverSAT:
             length_sol += 1
             elapsed_time = time.time() - start_time
 
-            circuit_pos = self.model_to_coordinates(model, p, self.plate_width, length_sol, self.circuits_num, r)
+            circuit_pos = self.convert(model, p, self.plate_width, length_sol, self.circuits_num, r)
 
             return ((self.plate_width, length_sol), circuit_pos), elapsed_time
 
@@ -164,7 +164,7 @@ class SolverSAT:
             print("Unsatisfiable problem")
             return None, 0
 
-    def model_to_coordinates(self, model, p, w, l, n, r=None):
+    def convert(self, model, p, w, l, n, r=None):
         # Create solution array
         solution = np.array([[[is_true(model[p[i][j][k]]) for k in range(n)] for j in range(w)] for i in range(l)])
         circuits_pos = []
